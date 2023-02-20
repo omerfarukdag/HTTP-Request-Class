@@ -21,13 +21,16 @@ class Http
         }
     }
 
-    public function url(string $url): Http
+    public function url(string $url): self
     {
+        if (!filter_var($url, FILTER_VALIDATE_URL)) {
+            throw new Exception('Invalid URL');
+        }
         $this->options[CURLOPT_URL] = $url;
         return $this;
     }
 
-    public function method(string $method): Http
+    public function method(string $method): self
     {
         if (!in_array($method, ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'])) {
             throw new Exception('Invalid HTTP method');
@@ -36,7 +39,7 @@ class Http
         return $this;
     }
 
-    public function headers(array $headers): Http
+    public function headers(array $headers): self
     {
         if (!empty($headers)) {
             foreach ($headers as $header) {
@@ -46,7 +49,7 @@ class Http
         return $this;
     }
 
-    public function settings(array $options): Http
+    public function settings(array $options): self
     {
         if (!empty($options)) {
             foreach ($options as $key => $value) {
@@ -56,7 +59,7 @@ class Http
         return $this;
     }
 
-    public function body(array $body, bool $json = false): Http
+    public function body(array $body, bool $json = false): self
     {
         if (!empty($body)) {
             if (!isset($this->method)) {
@@ -64,23 +67,23 @@ class Http
             }
             if (in_array($this->method, ['POST', 'PUT', 'PATCH'])) {
                 $this->options[CURLOPT_POSTFIELDS] = (true === $json) ? json_encode($body) : http_build_query($body);
+                if (true === $json) {
+                    $this->options[CURLOPT_HTTPHEADER][] = 'Content-Type: application/json';
+                }
             } elseif (in_array($this->method, ['GET', 'DELETE'])) {
                 throw new Exception('GET and DELETE methods cannot have a body');
-            }
-            if (true === $json) {
-                $this->options[CURLOPT_HTTPHEADER][] = 'Content-Type: application/json';
             }
         }
         return $this;
     }
 
-    public function json(): Http
+    public function json(): self
     {
         $this->options[CURLOPT_HTTPHEADER][] = 'Accept: application/json';
         return $this;
     }
 
-    public function bearer(string $token): Http
+    public function bearer(string $token): self
     {
         $this->options[CURLOPT_HTTPHEADER][] = 'Authorization: Bearer ' . $token;
         return $this;
@@ -103,11 +106,6 @@ class Http
         $this->response = curl_exec($this->curl);
     }
 
-    // public function getStatusCode(): int
-    // {
-    //     return curl_getinfo($this->curl, CURLINFO_HTTP_CODE);
-    // }
-
     public function getResponse(): string|bool
     {
         return $this->response;
@@ -122,6 +120,11 @@ class Http
     {
         return curl_error($this->curl);
     }
+
+    // public function getStatusCode(): int
+    // {
+    //     return curl_getinfo($this->curl, CURLINFO_HTTP_CODE);
+    // }
 
     // public function getOptions(): array
     // {
