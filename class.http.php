@@ -1,40 +1,42 @@
-<?php
+<?php declare(strict_types=1);
 /**
  * HTTP Request Class
- * @author Ömer Faruk DAĞ https://github.com/omerfarukdag
+ * @author github/omerfarukdag
  */
-class Http
+class Request
 {
     private CurlHandle|false $curl;
     private string|bool $response;
-    private string $method;
+    private ?string $method = null;
     private array $options = [
         CURLOPT_RETURNTRANSFER => true,
     ];
 
+    private function throwIf(bool $condition, string $message): void
+    {
+        if ($condition) {
+            throw new Exception($message);
+        }
+    }
+
     public function __construct()
     {
-        if (!extension_loaded('curl')) {
-            throw new Exception('cURL extension is not loaded');
-        } else {
-            $this->curl = curl_init();
-        }
+        $this->throwIf(!extension_loaded('curl'), 'cURL extension is not loaded');
+        $this->curl = curl_init();
     }
 
     public function url(string $url): self
     {
-        if (!filter_var($url, FILTER_VALIDATE_URL)) {
-            throw new Exception('Invalid URL');
-        }
+        $url = trim($url);
+        $this->throwIf(!filter_var($url, FILTER_VALIDATE_URL), 'Invalid URL');
         $this->options[CURLOPT_URL] = $url;
         return $this;
     }
 
     public function method(string $method): self
     {
-        if (!in_array($method, ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'])) {
-            throw new Exception('Invalid HTTP method');
-        }
+        $method = trim(strtoupper($method));
+        $this->throwIf(!in_array($method, ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']), 'Invalid HTTP method');
         $this->method = $method;
         return $this;
     }
@@ -62,22 +64,20 @@ class Http
     public function body(array $body, bool $json = false): self
     {
         if (!empty($body)) {
-            if (!isset($this->method)) {
-                throw new Exception('HTTP method is not set');
-            }
+            $this->throwIf(is_null($this->method), 'HTTP method is not set');
             if (in_array($this->method, ['POST', 'PUT', 'PATCH'])) {
-                $this->options[CURLOPT_POSTFIELDS] = (true === $json) ? json_encode($body) : http_build_query($body);
-                if (true === $json) {
+                $this->options[CURLOPT_POSTFIELDS] = http_build_query($body);
+                if ($json === true) {
+                    $this->options[CURLOPT_POSTFIELDS] = json_encode($body);
                     $this->options[CURLOPT_HTTPHEADER][] = 'Content-Type: application/json';
                 }
-            } elseif (in_array($this->method, ['GET', 'DELETE'])) {
-                throw new Exception('GET and DELETE methods cannot have a body');
             }
+            $this->throwIf(in_array($this->method, ['GET', 'DELETE']), 'GET and DELETE methods cannot have a body');
         }
         return $this;
     }
 
-    public function json(): self
+    public function acceptJson(): self
     {
         $this->options[CURLOPT_HTTPHEADER][] = 'Accept: application/json';
         return $this;
@@ -89,14 +89,10 @@ class Http
         return $this;
     }
 
-    public function exec(): void
+    public function send(): void
     {
-        if (!isset($this->options[CURLOPT_URL])) {
-            throw new Exception('URL is not set');
-        }
-        if (!isset($this->method)) {
-            throw new Exception('HTTP method is not set');
-        }
+        $this->throwIf(empty($this->options[CURLOPT_URL]), 'URL is not set');
+        $this->throwIf(is_null($this->method), 'HTTP method is not set');
         if ($this->method === 'POST') {
             $this->options[CURLOPT_POST] = true;
         } elseif ($this->method !== 'GET') {
@@ -111,30 +107,20 @@ class Http
         return $this->response;
     }
 
-    public function hasError(): bool
+    public function hasErrors(): bool
     {
         return (bool) curl_error($this->curl);
     }
 
-    public function getError(): string|bool
+    public function getErrors(): string|bool
     {
         return curl_error($this->curl);
     }
 
-    // public function getStatusCode(): int
-    // {
-    //     return curl_getinfo($this->curl, CURLINFO_HTTP_CODE);
-    // }
-
-    // public function getOptions(): array
-    // {
-    //     return $this->options;
-    // }
-
-    // public function getVersion(): array
-    // {
-    //     return curl_version();
-    // }
+    public function getStatusCode(): int
+    {
+        return curl_getinfo($this->curl, CURLINFO_HTTP_CODE);
+    }
 
     public function __destruct()
     {
